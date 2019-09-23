@@ -1,0 +1,246 @@
+/***********************************************************************
+// OOP244 Final Project Milestone 5
+// -----------------------------------------------------------
+// No.: 143381184
+// Name: Chade Li
+// Date: 2019-3-29
+// File: AmaApp.cpp
+/////////////////////////////////////////////////////////////////
+***********************************************************************/
+#include <iostream>
+#include <cstring>
+#include <fstream>
+#include <iomanip>
+#include "AmaApp.h"
+using namespace std;
+
+namespace ama {
+    // customer constructor receives the filename as the parameter
+    AmaApp::AmaApp(const char* filename) {
+        strncpy(m_filename, filename, 255);
+        m_filename[255] = '\0';
+        for (int i = 0; i < 100; i++) {
+            m_products[i] = nullptr;
+        }
+        m_noOfProducts = 0;
+        loadProductRecords();
+    }
+
+    // destructor to deallocate any dynamic memory
+    AmaApp::~AmaApp() {
+        for (int i = 0; i < 100; i++) {
+            delete m_products[i];
+            m_products[i] = nullptr;
+        }
+    }
+
+    // implement private member functions
+    // A query that prints information to wait for the user to hit enter
+    void AmaApp::pause() const {
+        cin.ignore();
+        cout << "Press Enter to continue...";
+        cin.ignore();
+        cout << endl;
+    }
+
+    // display the menu and waits for the user to select an option
+    int AmaApp::menu() const {
+        int option;
+
+        cout << "Disaster Aid Supply Management Program\n";
+        cout << "--------------------------------------\n";
+        cout << "1- List products\n2- Search product\n3- Add non-perishable product\n";
+        cout << "4- Add perishable product\n5- Add to product quantity\n6- Delete product\n7- Sort products\n";
+        cout << "0- Exit program\n> ";
+        cin >> option;
+        cin.clear();
+        if (option > 7 || option < 0) {
+            option = -1;
+        }
+        return option;
+    }
+
+    // open the data file for reading
+    void AmaApp::loadProductRecords() {
+        for (int i = 0; i < 100; i++) {
+            delete m_products[i];
+            m_products[i] = nullptr;
+        }
+        // read the file line by line and store in the pointer array
+        ifstream fin;
+        fin.open(m_filename, ios::in);
+        if (fin.fail()) {
+            fstream f(m_filename, ios::in);
+            fin.open(m_filename, ios::in);
+        } else {
+            int counter = 0;
+            char tag;
+            while(!fin.eof()) {
+                fin >> tag;
+                if (!fin.eof()) {
+                    iProduct* pNew = createInstance(tag);
+                    if (pNew != nullptr) {
+                        m_products[counter] = pNew;
+                    }
+                    fin.ignore();
+                    m_products[counter]->read(fin, false);
+                    counter++;
+                }
+            }
+            m_noOfProducts = counter;
+        }  
+        fin.close();
+    }
+
+    // loop through the m_products arrays and store each of them in a file
+    void AmaApp::saveProductRecords() const {
+        ofstream fout(m_filename, ios::out);
+        if (!fout.fail()) {
+            for (int i = 0; i < m_noOfProducts; i++) {
+                m_products[i]->write(fout, write_condensed);
+                fout << endl;
+            }
+        }
+        fout.close();
+    }
+    void AmaApp::listProducts() const {
+        double total = 0.0;
+        cout << "------------------------------------------------------------------------------------------------" << endl;
+        cout << "| Row |     SKU | Product Name     | Unit       |   Price | Tax |   QtyA |   QtyN | Expiry     |" << endl;
+        cout << "|-----|---------|------------------|------------|---------|-----|--------|--------|------------|" << endl;
+        for (int i = 0; i < m_noOfProducts; i++) {
+            cout << "|" << right << setw(4) << i + 1 << " |";
+            m_products[i]->write(cout, write_table);
+            total += m_products[i]->total_cost();
+            cout << endl;
+        }
+        cout << "------------------------------------------------------------------------------------------------" << endl;
+        cout << "|                                                      Total cost of support ($): | ";
+        cout << setw(10) << right << fixed << setprecision(2) << total << left <<" |" << endl;
+        cout << "------------------------------------------------------------------------------------------------" << endl;
+        cout << endl;
+        pause();
+    }
+
+    // loop through the m_products array and check if the incoming arugment matches the product SKU
+    iProduct* AmaApp::find(const char* sku) const {
+        int flag = 0;
+        iProduct* pFind = nullptr;
+        for (int i = 0; i < m_noOfProducts && flag == 0; i++) {
+            if (*m_products[i] == sku) {
+                pFind = m_products[i];
+                flag = 1;
+            }
+        }
+        return pFind;
+    }
+
+    // update the quantity on hand for a iProduct
+    void AmaApp::addQty(iProduct* product) {
+        int num, addNum;
+        addNum = product->qtyNeeded() - product->qtyAvailable();
+
+        product->write(cout, write_human);
+        cout << "\n\n";
+        cout << "Please enter the number of purchased items: ";
+        cin >> num;
+        if (cin.fail()) {
+            cout << "Invalid quantity value!" << endl << endl;
+            cin.clear();
+            cin.ignore(2000, '\n');
+        } else {
+            if (num > addNum) {
+                cout << "Too many items; only " << addNum << " is needed. Please return the extra " << num - addNum << " items." <<endl;
+                num = addNum;
+            }
+
+            *product += num;
+            saveProductRecords();
+            cout << endl << "Updated!" << endl << endl;
+        }
+    }
+
+    // add a new product at the end of the array
+    void AmaApp::addProduct(char tag) {
+        iProduct* PRODUCT = createInstance(tag);
+        if (PRODUCT != nullptr) {
+            m_products[m_noOfProducts] = PRODUCT;
+            cin >> *m_products[m_noOfProducts];
+            if (cin.fail()) {
+                cin.clear();
+                cin.ignore(2000, '\n');
+                cout << endl << *m_products[m_noOfProducts] << endl << endl;    
+            } else {
+                cout << endl << "Success!" << endl << endl;
+                m_noOfProducts++;
+                saveProductRecords();
+            }
+        }
+    }
+    
+    // display the menu, receive the user's selection and do the action requested
+    int AmaApp::run() {
+        int choice;
+        do {
+            char sku[max_length_sku];
+            // create a test pointer for searching product
+            iProduct* test = nullptr;
+            choice = menu();
+            switch (choice) {
+                // list products
+                case 1:
+                    listProducts();
+                    // cout << "no_of_products: " << m_noOfProducts << endl << endl;
+                    break;
+                // search and display product
+                case 2:
+                    cout << "Please enter the product SKU: ";
+                    cin >> sku;
+                    cout << endl;
+                    test = find(sku);
+                    if (test != nullptr) {
+                        test->write(cout, write_human);
+                    } else {
+                        cout << "No such product!";
+                        delete test;
+                    }
+                    cout << endl;
+                    pause();
+                    break;
+                // add non-perishable product
+                case 3:
+                    addProduct('N');
+                    loadProductRecords();
+                    break;
+                // add perishable product
+                case 4:
+                    addProduct('P');
+                    loadProductRecords();
+                    break;
+                // add to quantity of purchased products
+                case 5:
+                    cout << "Please enter the product SKU: ";
+                    cin >> sku;
+                    cout << endl;
+                    test = find(sku);
+                    if (test != nullptr) {
+                        addQty(test);
+                    } else {
+                        cout << "No such product!" << endl << endl;
+                        delete test;
+                    }
+                    break;
+                // exit program
+                case 0:
+                    cout << "Goodbye!" << endl;
+                    exit(0);
+                // invalid menu selection
+                default:
+                    cout << "~~~Invalid selection, try again!~~~" << endl;
+                    pause();
+            }
+        } while (choice != 0);
+        
+        return 0;
+    }
+}
