@@ -1,4 +1,4 @@
-# C++ Project: AID MANAGEMENT APPLICATION
+# C++ Project: Aid Management App (AMA)
 
 This is the final project of Course OOP244 at Seneca College, finished in 2019 Winter Semester.
 
